@@ -1,0 +1,5 @@
+/dataset
+/features
+/.vscode
+*.pyc
+*.csv

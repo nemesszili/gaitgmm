@@ -11,7 +11,6 @@ import copy
 from util.const import *
 from util.settings import *
 from util.gmm import create_ubm_gmm, gmm_map_mean_adaptation
-from util.helper import *
 from util.myplots import *
 
 ##
@@ -73,6 +72,19 @@ def extract():
     pass
 
 ##
+#  Recalculate score averages for multiple cycles.
+#
+#  @param[in]  scores  
+#  @return
+#
+def cycle_scores(scores):
+    pscores = []
+    for j in range(0, len(scores) - NUM_CYCLES):
+        avg = sum(scores[j:j + NUM_CYCLES]) / NUM_CYCLES
+        pscores.append(avg)
+    return pscores
+
+##
 #  Train and evaluate the model.
 #
 def train_evaluate(df0, df1, df2):
@@ -84,6 +96,10 @@ def train_evaluate(df0, df1, df2):
     system_positive_scores = []
     system_negative_scores = []
 
+    # Unregistered negative samples
+    neg_userids = ['u%03d' % i for i in NEG_USER_RANGE]
+    unreg_negative_samples = df0.loc[df0.iloc[:, -1].isin(neg_userids)]
+
     # Global system score file
     scorefile = open("scores.csv", "w")
 
@@ -92,26 +108,28 @@ def train_evaluate(df0, df1, df2):
 
     # Train user-specific GMMs and evaluate them
     for i in range(0, NUM_USERS):
-        # Select all samples belonging to current user
+        # Select all samples that belong to current user
         user_train_data = df1.loc[df1.iloc[:, -1].isin([userids[i]])]
         numSamples = user_train_data.shape[0]
 
         # Select data for training
         user_train_data = user_train_data.drop(
-            user_train_data.columns[-1], axis=1)
+            user_train_data.columns[-1], 
+            axis=1)
         array = user_train_data.values
         half = (int)(numSamples / 2)
         X_train = array[0: half, :]
 
-        # If we should evaluate with cross session data,
-        # use features from session2 (df2), otherwise
-        # take the second half of session1 (df1)
+        # If we should take positive samples from cross
+        # session data, use features from session2 (df2),
+        # otherwise take the second half of session1 (df1)
         if CROSS_SESSION == False:
             X_test = array[half:numSamples, :]
         else:
             user_test_data = df2.loc[df2.iloc[:, -1].isin([userids[i]])]
             user_test_data = user_test_data.drop(
-                user_test_data.columns[-1], axis=1)
+                user_test_data.columns[-1], 
+                axis=1)
             X_test = user_test_data.values
 
         if ADAPTED_GMM == True:
@@ -120,7 +138,7 @@ def train_evaluate(df0, df1, df2):
             gmm_map_mean_adaptation(gmm, X_train)
         else:
             gmm = GaussianMixture(
-                n_components=NUM_USER_MIXTURES, 
+                n_components=NUM_USER_MIXTURES,
                 covariance_type=COVAR_TYPE,
                 random_state=RANDOM_STATE)
             gmm.fit(X_train)
@@ -129,47 +147,54 @@ def train_evaluate(df0, df1, df2):
         # If value is positive, it belongs to the user model, otherwise
         # it's "closer" to the UBM
         positive_scores = gmm.score_samples(X_test)
-        num_positive_scores_before_average = len(positive_scores)
         background_scores = gmm_ubm.score_samples(X_test)
         positive_scores -= background_scores
 
-        # Recalculate score averages for multiple cycles
-        if NUM_CYCLES > 1:
-            pscores = []
-            for j in range(0, len(positive_scores) - NUM_CYCLES):
-                avg = sum(positive_scores[j:j + NUM_CYCLES]) / NUM_CYCLES
-                pscores.append(avg)
-            positive_scores = pscores
+        # Save the number of positive samples for sampling
+        # negative samples later
+        num_positive_scores_orig = len(positive_scores)
 
+        if NUM_CYCLES > 1:
+            positive_scores = cycle_scores(positive_scores)
+
+        # Prepare positive label array for ROC AUC evaluation
         positive_labels = np.full(len(positive_scores), 1)
+
+        # Output scores obtained on positive samples with
+        # their respective '1' label
         for pscore in positive_scores:
-            scorefile.write( "1," + str(pscore) + "\n")
+            scorefile.write("1," + str(pscore) + "\n")
 
         # Take negative samples (impostors) from either the set of
         # registered (session1) or unregistered (session0) users.
         if REGISTERED_NEGATIVES == True:
-            negativesamples= select_negatives_from_other_users(df1, 'u%03d' % (i+1), num_positive_scores_before_average)
+            userid = ['u%03d' % (i+1)]
+            other_users_data = df1.loc[~df1.iloc[:, -1].isin(userid)]
+            neg_samples = other_users_data.sample(
+                num_positive_scores_orig, 
+                random_state=RANDOM_STATE)
         else:
-            negative_test_samples = unreg_negative_samples(df0)
-            negative_samples = negative_test_samples()
-            negativesamples = select_negative_samples_numsamples(negative_test_samples, num_positive_scores_before_average)
-        X_negative_test = negativesamples.values[:, 0:numFeatures - 1]
+            neg_samples = unreg_negative_samples.sample(
+                num_positive_scores_orig, 
+                random_state=RANDOM_STATE)
 
-        # negative_scores
+        X_negative_test = neg_samples.drop(
+            neg_samples.columns[-1],
+            axis=1)
+
+        # Measure the log-likelihood differences scores of negative samples
         negative_scores = gmm.score_samples(X_negative_test)
         bg_scores = gmm_ubm.score_samples(X_negative_test)
         negative_scores -= bg_scores
-        if NUM_CYCLES > 1:
-            pscores = []
-            for j in range(0, len(negative_scores) - NUM_CYCLES):
-                sump = 0
-                for k in range(0,NUM_CYCLES):
-                    sump += negative_scores[j+k]
-                pscores.append(sump/NUM_CYCLES)
-            negative_scores = pscores
 
-        # negative_scores = preprocessing.scale(negative_scores)
-        negative_labels = np.full(len(negative_scores),0)
+        if NUM_CYCLES > 1:
+            negative_scores = cycle_scores(negative_scores)
+
+        # Prepare negative label array for ROC AUC evaluation
+        negative_labels = np.full(len(negative_scores), 0)
+
+        # Output scores obtained on positive samples with
+        # their respective '0' label
         for j in range(0, len(negative_scores)):
             scorefile.write("0," + str(negative_scores[j]) + "\n")
 
@@ -179,11 +204,11 @@ def train_evaluate(df0, df1, df2):
         system_positive_scores.extend(positive_scores)
         system_negative_scores.extend(negative_scores)
 
-        # AUC
+        # ROC AUC evaluation
         try:
-            auc =   metrics.roc_auc_score(labels, scores )
+            auc = metrics.roc_auc_score(labels, scores)
             auc_list.append(auc)
-        except:
+        except ValueError:
             print('Exception at user ', i)
             print("NEGATIVE", negative_scores)
             print("POSITIVE", positive_scores)
@@ -194,7 +219,6 @@ def train_evaluate(df0, df1, df2):
         eer_list.append(eer)
 
         print(userids[i], auc, eer)
-        # plot_scores(userids[ i ], negative_scores, positive_scores)
     
     m_auc = np.mean(auc_list)
     sd_auc = np.std(auc_list)

@@ -16,9 +16,9 @@ def main(force_extract):
               ADAPTED_GMM, REGISTERED_NEGATIVES)
     neg_scores, pos_scores = train_evaluate(
         dataframes, params, 'scores.csv')
-    tpr, fpr, _ = evaluate('scores.csv')
+    tpr, fpr, auc_value, eer = evaluate('scores.csv')
+    plotAUC('scores.csv')
 
-    # plotAUC('scores.csv')
     # plot_scores('All users: u001-u040', neg_scores, pos_scores)
     # plot_cycles_ROC_1_10()
 

@@ -7,7 +7,7 @@
 #          test samples are taken from session2 (cross-day)
 #  False - user models are both trained and tested using samples from
 #          samples from session1 (same-day)
-CROSS_SESSION = True
+CROSS_SESSION = False
 
 ##
 #  True  - data is segmented using the annotated step cycle boundaries

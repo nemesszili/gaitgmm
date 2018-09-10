@@ -66,7 +66,7 @@ def gmm_map_mean_adaptation(gmm, X):
 
         for i in range(0, K):
             for j in range(0, nDim):
-                mu_update[i][j] = 
+                mu_update[i][j] = \
                     alpha[i] * mu_update[i][j] + (1 - alpha[i]) * mu[i][j]
 
         gmm.means_ = mu_update

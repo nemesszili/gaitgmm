@@ -22,5 +22,6 @@ NEG_USER_RANGE = range(12, 23)
 # Total number of users
 NUM_USERS = 153
 
-# Random state for reproducibility
+# Random states for reproducibility
 RANDOM_STATE = np.random.seed(0)
+RANDOM_STATE_SAMPLE = 1

@@ -11,32 +11,12 @@ import copy
 from util.const import *
 from util.settings import *
 from util.gmm import create_ubm_gmm, gmm_map_mean_adaptation
-from util.myplots import *
-
-##
-#  Extract and load features from the dataset.
-#
-#  @param[in] force_extract  Flag for re-extracting feature files
-#  @param[in] cycle          Flag for using features from annotated cycles
-#  @return    df0, df1, df2  One dataframe for each session
-#
-
-def extract_load_feat(force_extract, cycle):
-    # Create directory for feature CSVs
-    pathlib.Path(FEAT_DIR).mkdir(exist_ok=True)
-
-    num_csv = len(list(pathlib.Path(FEAT_DIR).glob('*.csv')))
-    force_extract |= (num_csv < 6)
-
-    # Extract features
-    if force_extract:
-        extract()
-    
-    # Load features
-    return load(cycle)
 
 ##
 #  Load features from the appropriate CSV files for all sessions
+#
+#  @param[in] cycle          Flag for using features from annotated cycles
+#  @return    df0, df1, df2  One dataframe for each session
 #
 def load(cycle):
     if cycle == True:
@@ -63,31 +43,50 @@ def load(cycle):
     data2 = pd.read_csv(filename_session2, header=None)
     df2 = pd.DataFrame(data2)
 
-    return df0, df1, df2
+    return (df0, df1, df2)
 
 ##
-#  Extract features from the dataset
+#  Calculate TPR, FPR, AUC and EER from scorefile
 #
-def extract():
-    pass
+#  @param[in]  scorefile  Scorefile of the system
+#  @return     Tuple of arrays and values.
+#
+def evaluate(scorefile):
+    data = pd.read_csv(scorefile, names=['label','score'])
+    labels = [int(e) for e in data['label']]
+    scores = [float(e) for e in data['score']]
+    fpr, tpr, _ = metrics.roc_curve(labels, scores, pos_label=1)
+    auc = metrics.roc_auc_score(np.array(labels), np.array(scores))
+    eer = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
+
+    return (tpr, fpr, auc, eer)
 
 ##
 #  Recalculate score averages for multiple cycles.
 #
-#  @param[in]  scores  
-#  @return
+#  @param[in]  scores      Array of score deltas based on proximities
+#                          to own model and UBM
+#  @param[in]  num_cycles  Number of consecutive cycles to be averaged
+#  @return                 Averages of consecutive cycle sequences
 #
-def cycle_scores(scores):
-    pscores = []
-    for j in range(0, len(scores) - NUM_CYCLES):
-        avg = sum(scores[j:j + NUM_CYCLES]) / NUM_CYCLES
-        pscores.append(avg)
-    return pscores
+def cycle_scores(scores, num_cycles):
+    if num_cycles > 1:
+        pscores = []
+        for j in range(0, len(scores) - num_cycles):
+            avg = sum(scores[j:j + num_cycles]) / num_cycles
+            pscores.append(avg)
+        return pscores
+    return scores
 
 ##
 #  Train and evaluate the model.
 #
-def train_evaluate(df0, df1, df2):
+#  @return  Tuple of systemwide positive and negative scores
+#
+def train_evaluate(dataframes, params, scorefile):
+    df0, df1, df2 = dataframes
+    cross_session, cycle, num_cycles, adapted_gmm, reg_negatives = params
+
     # Setup
     numFeatures = df0.shape[1]
     userids  = ['u%03d' % i for i in range(1, NUM_USERS + 1)]
@@ -101,7 +100,7 @@ def train_evaluate(df0, df1, df2):
     unreg_negative_samples = df0.loc[df0.iloc[:, -1].isin(neg_userids)]
 
     # Global system score file
-    scorefile = open("scores.csv", "w")
+    scorefile = open(scorefile, "w")
 
     # Train the UBM
     gmm_ubm = create_ubm_gmm(df0)
@@ -123,7 +122,7 @@ def train_evaluate(df0, df1, df2):
         # If we should take positive samples from cross
         # session data, use features from session2 (df2),
         # otherwise take the second half of session1 (df1)
-        if CROSS_SESSION == False:
+        if cross_session == False:
             X_test = array[half:numSamples, :]
         else:
             user_test_data = df2.loc[df2.iloc[:, -1].isin([userids[i]])]
@@ -132,7 +131,7 @@ def train_evaluate(df0, df1, df2):
                 axis=1)
             X_test = user_test_data.values
 
-        if ADAPTED_GMM == True:
+        if adapted_gmm == True:
             # MAP adaptation of the UBM using the user's training data
             gmm = copy.deepcopy(gmm_ubm)
             gmm_map_mean_adaptation(gmm, X_train)
@@ -154,8 +153,7 @@ def train_evaluate(df0, df1, df2):
         # negative samples later
         num_positive_scores_orig = len(positive_scores)
 
-        if NUM_CYCLES > 1:
-            positive_scores = cycle_scores(positive_scores)
+        positive_scores = cycle_scores(positive_scores, num_cycles)
 
         # Prepare positive label array for ROC AUC evaluation
         positive_labels = np.full(len(positive_scores), 1)
@@ -167,16 +165,16 @@ def train_evaluate(df0, df1, df2):
 
         # Take negative samples (impostors) from either the set of
         # registered (session1) or unregistered (session0) users.
-        if REGISTERED_NEGATIVES == True:
+        if reg_negatives == True:
             userid = ['u%03d' % (i+1)]
             other_users_data = df1.loc[~df1.iloc[:, -1].isin(userid)]
             neg_samples = other_users_data.sample(
                 num_positive_scores_orig, 
-                random_state=RANDOM_STATE)
+                random_state=RANDOM_STATE_SAMPLE)
         else:
             neg_samples = unreg_negative_samples.sample(
                 num_positive_scores_orig, 
-                random_state=RANDOM_STATE)
+                random_state=RANDOM_STATE_SAMPLE)
 
         X_negative_test = neg_samples.drop(
             neg_samples.columns[-1],
@@ -187,8 +185,7 @@ def train_evaluate(df0, df1, df2):
         bg_scores = gmm_ubm.score_samples(X_negative_test)
         negative_scores -= bg_scores
 
-        if NUM_CYCLES > 1:
-            negative_scores = cycle_scores(negative_scores)
+        negative_scores = cycle_scores(negative_scores, num_cycles)
 
         # Prepare negative label array for ROC AUC evaluation
         negative_labels = np.full(len(negative_scores), 0)
@@ -220,13 +217,12 @@ def train_evaluate(df0, df1, df2):
 
         print(userids[i], auc, eer)
     
-    m_auc = np.mean(auc_list)
+    m_auc  = np.mean(auc_list)
     sd_auc = np.std(auc_list)
-    print("User AUC (mean, stdev): "+str(m_auc)+", "+str(sd_auc))
+    print("User AUC (mean, stdev): {}, {}".format(m_auc, sd_auc))
     m_eer = np.mean(eer_list)
     sd_eer = np.std(eer_list)
-    print("User EER (mean, stdev): "+str(m_eer)+", "+str(sd_eer))
+    print("User EER (mean, stdev): {}, {}".format(m_eer, sd_eer))
     scorefile.close()
-    plotAUC("scores.csv")
-    plot_scores("All users: u001-u040", system_negative_scores, system_positive_scores)
 
+    return (system_negative_scores, system_positive_scores)

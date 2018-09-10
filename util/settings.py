@@ -25,7 +25,7 @@ NUM_CYCLES = 5
 #  True  - GMMs are trained by adaptation from the UBM
 #  False - Classic GMMs
 #
-ADAPTED_GMM = False
+ADAPTED_GMM = True
 
 ##
 #  True  - negative samples are selected from users of session1 
@@ -33,4 +33,4 @@ ADAPTED_GMM = False
 #  False - negative samples are selected from users of session0
 #          (unregistered: u11-u22)
 #
-REGISTERED_NEGATIVES = True
+REGISTERED_NEGATIVES = False

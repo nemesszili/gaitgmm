@@ -7,6 +7,9 @@ from util.const import *
 ##
 #  Train the Universal Background Model (UBM) with data from session0
 #
+#  @param[in]  df       Dataframe to be used for training the UBM
+#  @return     gmm_ubm  Universal Background Model
+#
 def create_ubm_gmm(df):
     numFeatures = df.shape[1]
     userids = ['u%03d' % i for i in UBM_USER_RANGE]
@@ -21,49 +24,49 @@ def create_ubm_gmm(df):
     gmm_ubm.fit(X)
     return gmm_ubm
 
-# gmm - an initial GMM
-# X - training data OR data used for adaptation
-# Explanation
-# K - number of components
-# nDim - dimension of feature vectors
-# Reynolds GMM - MAP adaptation
-# Only the means are adapted
-# Natalia Neverova, PhD, Lyon INSA, 2016
-def gmm_map_mean_adaptation( gmm, X ):
+##
+#  Reynolds GMM - Maximum A Posteriori adaptation by adapting only 
+#  mean vectors. Written by Natalia Neverova, PhD, Lyon INSA, 2016.
+# 
+#  @param[in]  gmm  GMM to be adapted
+#  @param[in]  X    Data used for adaptation
+#
+def gmm_map_mean_adaptation(gmm, X):
+    # K    - number of Gaussian mixtures in the model
+    # nDim - dimension of feature vectors
     K, nDim = gmm.means_.shape
+
     T = len(X)
     numIterations = 10
-    for iter in range(0,numIterations):
-        # print("Iteration: ", iter)
-        w = gmm.weights_
-        w_update = np.empty([K])
+
+    for _ in range(0, numIterations):
         mu = np.empty([K, nDim])
         mu_update = np.empty([K, nDim])
 
+        # Initialize mean vectors for every component
         for k in range(0, K):
              mu[k] = gmm.means_[k]
 
-        # posterior probability of each component
+        # Posterior probability of each component
         pcompx = gmm.predict_proba(X)
-        # n_i: sum of posterior probabilities for each component
-        n_i = np.sum(pcompx, axis=0)
+        # sum_i - sum of posterior probabilities for each component
+        sum_i = np.sum(pcompx, axis=0)
         for i in range(0, K):
-            if (n_i[i] < EPS):
-                n_i[i] = SMALLVALUE
-        ALPHA = n_i/(n_i+r)
-        # means
+            if (sum_i[i] < EPS):
+                sum_i[i] = SMALLVALUE
+        alpha = sum_i / (sum_i + r)
+
+        # Mean adjustments
         for i in range(0,K):
             for j in range(0, nDim):
                 mu_update[i][j] = 0
                 for t in range(0,T):
-                    mu_update[i][j]+=pcompx[t][i]*X[t][j]
-                mu_update[i][j]/=n_i[i]
-        # means
+                    mu_update[i][j] += pcompx[t][i] * X[t][j]
+                mu_update[i][j] /= sum_i[i]
+
         for i in range(0, K):
             for j in range(0, nDim):
-                mu_update[i][j] =ALPHA[i]*mu_update[i][j] + (1-ALPHA[i])*mu[i][j]
+                mu_update[i][j] = 
+                    alpha[i] * mu_update[i][j] + (1 - alpha[i]) * mu[i][j]
 
         gmm.means_ = mu_update
-        # score = gmm.score_samples(X)
-        # print("score:", sum(score) / T)
-    return

@@ -27,19 +27,27 @@ We considered the following baseline evaluation protocol:
 
 Install [pipenv](https://pipenv.readthedocs.io/en/latest/) before proceeding.
 
-`pip install --user pipenv`
+```
+pip install --user pipenv
+```
 
 After installation, enter the cloned project and run:
 
-`pipenv install`
+```
+pipenv install
+```
 
 This will install all project dependencies. Next, create the virtual environment:
 
-`pipenv shell`
+```
+pipenv shell
+```
 
 Run the script with:
 
-`python main.py`
+```
+python main.py
+```
 
 There are two ways to define evaluation parameters:
 - set them accordingly in [util/settings.py](https://github.com/nemesszili/gaitgmm/blob/master/util/settings.py)

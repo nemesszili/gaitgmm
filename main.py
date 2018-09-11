@@ -15,26 +15,26 @@ from util.myplots import plot_scores, plotAUC, plot_cycles_ROC_1_10
 @click.option('--plot-hist', is_flag=True,
               help='Plot system histogram for current settings')
 @click.option('--no-config', is_flag=True,
-              help='Use command-line params instead of settings.py')
+              help='Override settings.py with command-line options')
 @click.option('--cross-session/--same-session', default=False,
               help='Evaluate with data from session 2')
 @click.option('--cycle/--fixed', default=True,
               help='Segment the data based on annotation')
 @click.option('--num-cycles', default=10,
               help='Number of consecutive cycles used for evaluation')
-@click.option('--adapted/--classic', default=True,
+@click.option('--adapted-gmm/--classic-gmm', default=True,
               help='Use MAP adapted GMMs')
 @click.option('--reg-negatives/--unreg-negatives', default=False,
               help='Use registered negatives')
 def main(plot, plot_auc, plot_hist, no_config, cross_session, cycle, 
-         num_cycles, adapted, reg_negatives):
+         num_cycles, adapted_gmm, reg_negatives):
     if plot:
         plot_cycles_ROC_1_10()
         return
 
     if no_config:
         params = (cross_session, cycle, num_cycles, 
-                  adapted, reg_negatives)
+                  adapted_gmm, reg_negatives)
         dataframes = load(cycle)
     else:
         params = (CROSS_SESSION, CYCLE, NUM_CYCLES, 

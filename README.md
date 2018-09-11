@@ -14,7 +14,7 @@ The dataset contains walking data captured by 5 accelerometers (Wii Remote, ADXL
 
 ### Evaluation
 
-Performances are reported using widely used metrics used for biometric systems, such as **Equal Error Rate (EER)** and **Area Under Curve (AUC)**.
+Performances are reported using common metrics in biometric systems, such as **Equal Error Rate (EER)** and **Area Under Curve (AUC)**.
 We considered the following baseline evaluation protocol:
 
 |                      | Same-day                       | Cross-day |
@@ -22,6 +22,8 @@ We considered the following baseline evaluation protocol:
 | **Training**         | session1 (50% - first half)    | session1 (50% - first half)|
 | **Testing positive** | session1 (50% - second half)   | session2 (all samples) |
 | **Testing negative** | sampled session0 (u012 - u022) | sampled session0 (u012 - u022)|
+
+**_NOTE: All AUC and EER scores presented in the paper are NOT of the whole system, but the average of user specific values. The literature recommends this approach, because it makes little sense to evaluate scores from several different models/classifiers put together (these may even differ in magnitude), while averaged AUC and EER values give more insight into the performance in the complete system._**
 
 ### How it works
 
@@ -37,7 +39,7 @@ After installation, enter the cloned project and run:
 pipenv install
 ```
 
-This will install all project dependencies. Next, create the virtual environment:
+This will install all project dependencies. Next, activate the virtual environment:
 
 ```
 pipenv shell
@@ -60,15 +62,48 @@ arguments.
 
 | Plots         | Description |
 |:-------------:|-------------|
-| `--plot`      | Generate figure 3 from the paper |
-| `--plot-auc`  | Plot system AUC for current settings |
-| `--plot-hist` | Plot system histogram for current settings |
+| `--plot`      | Generate figure 3 from the paper (and do nothing else) |
+| `--plot-auc`  | Plot system AUC (global threshold) for current settings |
+| `--plot-hist` | Plot score histogram for current settings |
 
-| Settings                            | Description |
-|:-----------------------------------:|-------------|
-| `--no-config`                       | Override `settings.py` with command-line options |
-| `--cross-session/--same-session`    | Evaluate with data from session 2 **OR** Evaluate with data from session 1 (test data from the same session as training) |
-| `--cycle/--fixed`                   | Use annotations from the dataset **OR** Use fixed frames of 128 samples |
-| `--num-cycles`                      | Number of consecutive cycles used for evaluation |
-| `--adapted-gmm/--classic-gmm`       | Use MAP adapted GMMs **OR** Train GMMs from scratch |
-| `--reg-negatives/--unreg-negatives` | Use negative data from users that the model has already encountered **OR** Use unencountered data from unregistered users |
+| Settings                         | Default   | Description |
+|:--------------------------------:|:---------:|-------------|
+| `--no-config`                    | False     | Override `settings.py` with command-line options. The options below will only be considered if this is set. |
+| `--cross-session/--same-session` | `--same-session` | Evaluate with data from session 2 **OR** Evaluate with data from session 1 (test data from the same session as training) |
+| `--cycle/--fixed`                | `--cycle` | Use annotations from the dataset **OR** Use fixed frames of 128 samples |
+| `--num-cycles`                   | 10        | Number of consecutive cycles used for evaluation (range 1-10) |
+| `--adapted-gmm/--classic-gmm`    | `--adapted-gmm` | Use MAP adapted GMMs **OR** Train GMMs from scratch |
+| `--reg-neg/--unreg-neg`          | `--unreg-neg` | Use negative data from users that the model has already encountered **OR** Use unencountered data from unregistered users |
+
+When in doubt, run:
+
+```
+python main.py --help
+```
+
+#### Examples
+
+1\. Run an evaluation and plot AUC and score histogram:
+```
+python main.py --plot-auc --plot-hist
+```
+
+2\. Run an evaluation with setting parameters in console:
+```
+python main.py --no-config --cross-session --num-cycles=5 --classic-gmm
+```
+_NOTE: the unspecified parameters will use their default values._
+
+This is the equivalent of the following in `settings.py`
+```
+CROSS_SESSION = True
+CYCLE = True
+NUM_CYCLES = 5
+ADAPTED_GMM = False
+REGISTERED_NEGATIVES = False
+```
+
+3\. Generate AUCs for comparison
+```
+python main.py --plot
+```

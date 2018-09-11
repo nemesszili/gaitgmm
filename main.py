@@ -20,21 +20,21 @@ from util.myplots import plot_scores, plotAUC, plot_cycles_ROC_1_10
               help='Evaluate with data from session 2')
 @click.option('--cycle/--fixed', default=True,
               help='Segment the data based on annotation')
-@click.option('--num-cycles', default=10,
+@click.option('--num-cycles', type=click.IntRange(1, 10), default=10,
               help='Number of consecutive cycles used for evaluation')
 @click.option('--adapted-gmm/--classic-gmm', default=True,
               help='Use MAP adapted GMMs')
-@click.option('--reg-negatives/--unreg-negatives', default=False,
+@click.option('--reg-neg/--unreg-neg', default=False,
               help='Use registered negatives')
 def main(plot, plot_auc, plot_hist, no_config, cross_session, cycle, 
-         num_cycles, adapted_gmm, reg_negatives):
+         num_cycles, adapted_gmm, reg_neg):
     if plot:
         plot_cycles_ROC_1_10()
         return
 
     if no_config:
         params = (cross_session, cycle, num_cycles, 
-                  adapted_gmm, reg_negatives)
+                  adapted_gmm, reg_neg)
         dataframes = load(cycle)
     else:
         params = (CROSS_SESSION, CYCLE, NUM_CYCLES, 
@@ -60,8 +60,9 @@ def main(plot, plot_auc, plot_hist, no_config, cross_session, cycle,
 
     if plot_auc:
         plotAUC('scores.csv')
+
     if plot_hist:
-        plot_scores('All users: u001-u040', neg_scores, pos_scores)
+        plot_scores('Scores', neg_scores, pos_scores)
 
 if __name__ == '__main__':
     main()

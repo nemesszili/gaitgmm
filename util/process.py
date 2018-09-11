@@ -7,6 +7,7 @@ from sklearn import metrics
 from scipy.optimize import brentq
 from scipy.interpolate import interp1d
 import copy
+from click import progressbar
 
 from util.const import *
 from util.settings import *
@@ -106,117 +107,119 @@ def train_evaluate(dataframes, params, scorefile):
     gmm_ubm = create_ubm_gmm(df0)
 
     # Train user-specific GMMs and evaluate them
-    for i in range(0, NUM_USERS):
-        # Select all samples that belong to current user
-        user_train_data = df1.loc[df1.iloc[:, -1].isin([userids[i]])]
-        numSamples = user_train_data.shape[0]
+    items = range(NUM_USERS)
+    with progressbar(items) as bar:
+        for i in bar:
+            # Select all samples that belong to current user
+            user_train_data = df1.loc[df1.iloc[:, -1].isin([userids[i]])]
+            numSamples = user_train_data.shape[0]
 
-        # Select data for training
-        user_train_data = user_train_data.drop(
-            user_train_data.columns[-1], 
-            axis=1)
-        array = user_train_data.values
-        half = (int)(numSamples / 2)
-        X_train = array[0: half, :]
-
-        # If we should take positive samples from cross
-        # session data, use features from session2 (df2),
-        # otherwise take the second half of session1 (df1)
-        if cross_session == False:
-            X_test = array[half:numSamples, :]
-        else:
-            user_test_data = df2.loc[df2.iloc[:, -1].isin([userids[i]])]
-            user_test_data = user_test_data.drop(
-                user_test_data.columns[-1], 
+            # Select data for training
+            user_train_data = user_train_data.drop(
+                user_train_data.columns[-1], 
                 axis=1)
-            X_test = user_test_data.values
+            array = user_train_data.values
+            half = (int)(numSamples / 2)
+            X_train = array[0: half, :]
 
-        if adapted_gmm == True:
-            # MAP adaptation of the UBM using the user's training data
-            gmm = copy.deepcopy(gmm_ubm)
-            gmm_map_mean_adaptation(gmm, X_train)
-        else:
-            gmm = GaussianMixture(
-                n_components=NUM_USER_MIXTURES,
-                covariance_type=COVAR_TYPE,
-                random_state=RANDOM_STATE)
-            gmm.fit(X_train)
+            # If we should take positive samples from cross
+            # session data, use features from session2 (df2),
+            # otherwise take the second half of session1 (df1)
+            if cross_session == False:
+                X_test = array[half:numSamples, :]
+            else:
+                user_test_data = df2.loc[df2.iloc[:, -1].isin([userids[i]])]
+                user_test_data = user_test_data.drop(
+                    user_test_data.columns[-1], 
+                    axis=1)
+                X_test = user_test_data.values
 
-        # Measure the log-likelihood differences for authentication:
-        # If value is positive, it belongs to the user model, otherwise
-        # it's "closer" to the UBM
-        positive_scores = gmm.score_samples(X_test)
-        background_scores = gmm_ubm.score_samples(X_test)
-        positive_scores -= background_scores
+            if adapted_gmm == True:
+                # MAP adaptation of the UBM using the user's training data
+                gmm = copy.deepcopy(gmm_ubm)
+                gmm_map_mean_adaptation(gmm, X_train)
+            else:
+                gmm = GaussianMixture(
+                    n_components=NUM_USER_MIXTURES,
+                    covariance_type=COVAR_TYPE,
+                    random_state=RANDOM_STATE)
+                gmm.fit(X_train)
 
-        # Save the number of positive samples for sampling
-        # negative samples later
-        num_positive_scores_orig = len(positive_scores)
+            # Measure the log-likelihood differences for authentication:
+            # If value is positive, it belongs to the user model, otherwise
+            # it's "closer" to the UBM
+            positive_scores = gmm.score_samples(X_test)
+            background_scores = gmm_ubm.score_samples(X_test)
+            positive_scores -= background_scores
 
-        positive_scores = cycle_scores(positive_scores, num_cycles)
+            # Save the number of positive samples for sampling
+            # negative samples later
+            num_positive_scores_orig = len(positive_scores)
 
-        # Prepare positive label array for ROC AUC evaluation
-        positive_labels = np.full(len(positive_scores), 1)
+            positive_scores = cycle_scores(positive_scores, num_cycles)
 
-        # Output scores obtained on positive samples with
-        # their respective '1' label
-        for pscore in positive_scores:
-            scorefile.write("1," + str(pscore) + "\n")
+            # Prepare positive label array for ROC AUC evaluation
+            positive_labels = np.full(len(positive_scores), 1)
 
-        # Take negative samples (impostors) from either the set of
-        # registered (session1) or unregistered (session0) users.
-        if reg_negatives == True:
-            userid = ['u%03d' % (i+1)]
-            other_users_data = df1.loc[~df1.iloc[:, -1].isin(userid)]
-            neg_samples = other_users_data.sample(
-                num_positive_scores_orig, 
-                random_state=RANDOM_STATE_SAMPLE)
-        else:
-            neg_samples = unreg_negative_samples.sample(
-                num_positive_scores_orig, 
-                random_state=RANDOM_STATE_SAMPLE)
+            # Output scores obtained on positive samples with
+            # their respective '1' label
+            for pscore in positive_scores:
+                scorefile.write("1," + str(pscore) + "\n")
 
-        X_negative_test = neg_samples.drop(
-            neg_samples.columns[-1],
-            axis=1)
+            # Take negative samples (impostors) from either the set of
+            # registered (session1) or unregistered (session0) users.
+            if reg_negatives == True:
+                userid = ['u%03d' % (i+1)]
+                other_users_data = df1.loc[~df1.iloc[:, -1].isin(userid)]
+                neg_samples = other_users_data.sample(
+                    num_positive_scores_orig, 
+                    random_state=RANDOM_STATE_SAMPLE)
+            else:
+                neg_samples = unreg_negative_samples.sample(
+                    num_positive_scores_orig, 
+                    random_state=RANDOM_STATE_SAMPLE)
 
-        # Measure the log-likelihood differences scores of negative samples
-        negative_scores = gmm.score_samples(X_negative_test)
-        bg_scores = gmm_ubm.score_samples(X_negative_test)
-        negative_scores -= bg_scores
+            X_negative_test = neg_samples.drop(
+                neg_samples.columns[-1],
+                axis=1)
 
-        negative_scores = cycle_scores(negative_scores, num_cycles)
+            # Measure the log-likelihood differences scores of negative samples
+            negative_scores = gmm.score_samples(X_negative_test)
+            bg_scores = gmm_ubm.score_samples(X_negative_test)
+            negative_scores -= bg_scores
 
-        # Prepare negative label array for ROC AUC evaluation
-        negative_labels = np.full(len(negative_scores), 0)
+            negative_scores = cycle_scores(negative_scores, num_cycles)
 
-        # Output scores obtained on positive samples with
-        # their respective '0' label
-        for j in range(0, len(negative_scores)):
-            scorefile.write("0," + str(negative_scores[j]) + "\n")
+            # Prepare negative label array for ROC AUC evaluation
+            negative_labels = np.full(len(negative_scores), 0)
 
-        scores = np.concatenate((positive_scores, negative_scores), axis=0)
-        labels = np.concatenate((positive_labels, negative_labels), axis=0)
+            # Output scores obtained on positive samples with
+            # their respective '0' label
+            for j in range(0, len(negative_scores)):
+                scorefile.write("0," + str(negative_scores[j]) + "\n")
 
-        system_positive_scores.extend(positive_scores)
-        system_negative_scores.extend(negative_scores)
+            scores = np.concatenate((positive_scores, negative_scores), axis=0)
+            labels = np.concatenate((positive_labels, negative_labels), axis=0)
 
-        # ROC AUC evaluation
-        try:
-            auc = metrics.roc_auc_score(labels, scores)
-            auc_list.append(auc)
-        except ValueError:
-            print('Exception at user ', i)
-            print("NEGATIVE", negative_scores)
-            print("POSITIVE", positive_scores)
-        # FPR, TPR
-        fpr, tpr, thresholds = metrics.roc_curve(labels, scores, pos_label=1)
-        # EER
-        eer = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
-        eer_list.append(eer)
+            system_positive_scores.extend(positive_scores)
+            system_negative_scores.extend(negative_scores)
 
-        print(userids[i], auc, eer)
-    
+            # ROC AUC evaluation
+            try:
+                auc = metrics.roc_auc_score(labels, scores)
+                auc_list.append(auc)
+            except ValueError:
+                print('Exception at user ', i)
+                print("NEGATIVE", negative_scores)
+                print("POSITIVE", positive_scores)
+            # FPR, TPR
+            fpr, tpr, thresholds = metrics.roc_curve(
+                labels, scores, pos_label=1)
+            # EER
+            eer = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
+            eer_list.append(eer)
+
+    print()
     m_auc  = np.mean(auc_list)
     sd_auc = np.std(auc_list)
     print("User AUC (mean, stdev): {}, {}".format(m_auc, sd_auc))

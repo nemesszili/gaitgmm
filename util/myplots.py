@@ -53,37 +53,53 @@ def plot_scores(title, impostor_scores, genuine_scores):
 #  Plot figure for comparison of consecutive cycle AUCs (Fig.3. in paper)
 #
 def plot_cycles_ROC_1_10():
+    print('Evaluating same day 1 cycle')
     params = (False, True, 1, True, False)
     train_evaluate(load(params[1]), params, 'temp_scores.csv')
-    tpr_1, fpr_1, auc_1, _ = evaluate('temp_scores.csv')
+    tpr_1, fpr_1, auc_1, eer_1 = evaluate('temp_scores.csv')
+    print('System AUC: {}'.format(auc_1))
+    print('System EER: {}'.format(eer_1))
     try:
         os.remove('temp_scores.csv')
     except OSError:
         pass
+    print()
 
+    print('Evaluating same day 10 cycles')
     params = (False, True, 10, True, False)
     train_evaluate(load(params[1]), params, 'temp_scores.csv')
-    tpr_2, fpr_2, auc_2, _ = evaluate('temp_scores.csv')
+    tpr_2, fpr_2, auc_2, eer_2 = evaluate('temp_scores.csv')
+    print('System AUC: {}'.format(auc_2))
+    print('System EER: {}'.format(eer_2))
     try:
         os.remove('temp_scores.csv')
     except OSError:
         pass
+    print()
 
+    print('Evaluating cross day 1 cycle')
     params = (True, True, 1, True, False)
     train_evaluate(load(params[1]), params, 'temp_scores.csv')
-    tpr_3, fpr_3, auc_3, _ = evaluate('temp_scores.csv')
+    tpr_3, fpr_3, auc_3, eer_3 = evaluate('temp_scores.csv')
+    print('System AUC: {}'.format(auc_3))
+    print('System EER: {}'.format(eer_3))
     try:
         os.remove('temp_scores.csv')
     except OSError:
         pass
+    print()
     
+    print('Evaluating cross day 10 cycles')
     params = (True, True, 10, True, False)
     train_evaluate(load(params[1]), params, 'temp_scores.csv')
-    tpr_4, fpr_4, auc_4, _ = evaluate('temp_scores.csv')
+    tpr_4, fpr_4, auc_4, eer_4 = evaluate('temp_scores.csv')
+    print('System AUC: {}'.format(auc_4))
+    print('System EER: {}'.format(eer_4))
     try:
         os.remove('temp_scores.csv')
     except OSError:
         pass
+    print()
 
     plt.figure()
     lw = 2

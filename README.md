@@ -23,7 +23,7 @@ We considered the following baseline evaluation protocol:
 | **Testing positive** | session1 (50% - second half)   | session2 (all samples) |
 | **Testing negative** | sampled session0 (u012 - u022) | sampled session0 (u012 - u022)|
 
-**_NOTE: All AUC and EER scores presented in the paper are NOT of the whole system, but the average of user specific values. The literature recommends this approach, because it makes little sense to evaluate scores from several different models/classifiers put together (these may even differ in magnitude), while averaged AUC and EER values give more insight into the performance in the complete system._**
+**_NOTE: All AUC and EER scores presented in the paper are NOT of the whole system, but the average of user specific values. The literature recommends this approach, because it makes little sense to evaluate scores from several different models/classifiers put together (these may even differ in magnitude), while averaged AUC and EER values give more insight into the performance of the complete system._**
 
 ### How it works
 

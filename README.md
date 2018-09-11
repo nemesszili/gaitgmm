@@ -103,7 +103,12 @@ ADAPTED_GMM = False
 REGISTERED_NEGATIVES = False
 ```
 
-3\. Generate AUCs for comparison
+3\. Run an evaluation with custom settings and plot AUC
+```
+python main.py --no-config --cross-session --num-cycles=5 --plot-auc
+```
+
+4\. Generate AUCs for comparison
 ```
 python main.py --plot
 ```
